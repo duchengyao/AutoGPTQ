@@ -82,8 +82,8 @@ class GPTQ:
         H = self.H
         del self.H
         dead = torch.diag(H) == 0
-        H[dead, dead] = 1
-        W[:, dead] = 0
+        H[dead, dead] = 1 #!!??
+        W[:, dead] = 0    #!!??
 
         g_idx = []
         scale = []
@@ -122,12 +122,14 @@ class GPTQ:
             i2 = min(i1 + blocksize, self.columns)
             count = i2 - i1
 
+            # 初始化 i1~i2 的这些值，目前还不清楚Hinv是怎么来的
             W1 = W[:, i1:i2].clone()
             Q1 = torch.zeros_like(W1)
             Err1 = torch.zeros_like(W1)
             Losses1 = torch.zeros_like(W1)
             Hinv1 = Hinv[i1:i2, i1:i2]
 
+            # 好像在用 w q d 算一些什么东西
             for i in range(count):
                 w = W1[:, i]
                 d = Hinv1[i, i]
@@ -155,9 +157,11 @@ class GPTQ:
                 W1[:, i:] -= err1.unsqueeze(1).matmul(Hinv1[i, i:].unsqueeze(0))
                 Err1[:, i] = err1
 
+            # 这里可的 Q 后面会赋值到 weight
             Q[:, i1:i2] = Q1
             Losses[:, i1:i2] = Losses1 / 2
 
+            # 用 i1~i2 的一些东西改变 i2 以后的 W
             W[:, i2:] -= Err1.matmul(Hinv[i1:i2, i2:])
 
             if os.environ.get("DEBUG"):
@@ -182,6 +186,8 @@ class GPTQ:
 
         if isinstance(self.layer, transformers.Conv1D):
             Q = Q.t()
+
+        # 改变weight
         self.layer.weight.data = Q.reshape(self.layer.weight.shape).type_as(self.layer.weight.data)
         if os.environ.get("DEBUG"):
             logger.debug(torch.sum((self.layer(self.inp1) - self.out1) ** 2))

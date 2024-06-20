@@ -6,6 +6,35 @@ import torch.nn as nn
 
 logger = getLogger(__name__)
 
+nf4_map = [
+    -1.0,
+    -0.6961928009986877,
+    -0.5250730514526367,
+    -0.39491748809814453,
+    -0.28444138169288635,
+    -0.18477343022823334,
+    -0.09105003625154495,
+    0.0,
+    0.07958029955625534,
+    0.16093020141124725,
+    0.24611230194568634,
+    0.33791524171829224,
+    0.44070982933044434,
+    0.5626170039176941,
+    0.7229568362236023,
+    1.0,
+]
+
+
+def quantize_nf4(x, scale, zero, maxq):
+    dev = x.device
+    xx = ((x / scale) + zero) / 8 - 1
+    nf4_tensor = torch.tensor(nf4_map, device=dev, dtype=torch.float32)
+    expanded_nf4_tensor = nf4_tensor.unsqueeze(1)
+    q = nf4_tensor[torch.abs(expanded_nf4_tensor - xx.squeeze(1).unsqueeze(0)).argmin(dim=0)].unsqueeze(1)
+    qq = scale * ((q + 1) * 8 - zero)
+    return qq
+
 
 def quantize(x, scale, zero, maxq):
     if maxq < 0:
@@ -30,6 +59,7 @@ class Quantizer(nn.Module):
         norm=2.4,
         grid=100,
         maxshrink=0.8,
+        nf4=False,
         trits=False,
     ):
         self.maxq = torch.tensor(2**bits - 1)
@@ -39,6 +69,7 @@ class Quantizer(nn.Module):
         self.norm = norm
         self.grid = grid
         self.maxshrink = maxshrink
+        self.nf4 = nf4
         if trits:
             self.maxq = torch.tensor(-1)
 
@@ -126,6 +157,8 @@ class Quantizer(nn.Module):
             self.zero = self.zero.unsqueeze(0)
 
     def quantize(self, x):
+        if self.nf4:
+            return quantize_nf4(x, self.scale, self.zero, self.maxq)
         if self.ready():
             return quantize(x, self.scale, self.zero, self.maxq)
         return x

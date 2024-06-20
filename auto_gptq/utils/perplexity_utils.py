@@ -73,7 +73,7 @@ class Perplexity:
         data = load_dataset(self._dataset_path, self._dataset_name, split=self._split)
         # Format the text column of the dataset
         text_list = [" \n" if s == "" else s for s in data[self._text_column]]
-        return "".join(text_list)
+        return "".join(text_list)#[:10240]
 
     @staticmethod
     def softmax(logits):
