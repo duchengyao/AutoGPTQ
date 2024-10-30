@@ -303,6 +303,7 @@ class BaseGPTQForCausalLM(nn.Module, PushToHubMixin):
                         perchannel=True,
                         sym=self.quantize_config.sym,
                         mse=False,
+                        nf4=self.quantize_config.nf4,
                     )
 
                 def add_batch(name):
@@ -374,18 +375,19 @@ class BaseGPTQForCausalLM(nn.Module, PushToHubMixin):
             layer_inputs, layer_outputs = layer_outputs, []  # TODO: is it really OK to cache only the first positional argument?
             torch.cuda.empty_cache()
 
-        pack_model(
-            model=self.model,
-            quantizers=quantizers,
-            bits=self.quantize_config.bits,
-            group_size=self.quantize_config.group_size,
-            use_triton=use_triton,
-            use_cuda_fp16=use_cuda_fp16,
-            desc_act=self.quantize_config.desc_act,
-            warmup_triton=autotune_warmup_after_quantized,
-            force_layer_back_to_cpu=force_layer_back_to_cpu,
-            use_marlin=self.quantize_config.checkpoint_format == CHECKPOINT_FORMAT.MARLIN,
-        )
+        if self.quantize_config.pack:
+            pack_model(
+                model=self.model,
+                quantizers=quantizers,
+                bits=self.quantize_config.bits,
+                group_size=self.quantize_config.group_size,
+                use_triton=use_triton,
+                use_cuda_fp16=use_cuda_fp16,
+                desc_act=self.quantize_config.desc_act,
+                warmup_triton=autotune_warmup_after_quantized,
+                force_layer_back_to_cpu=force_layer_back_to_cpu,
+                use_marlin=self.quantize_config.checkpoint_format == CHECKPOINT_FORMAT.MARLIN,
+            )
         if device_map:
             self.model = remove_hook_from_module(self.model, recurse=True)
             self.model = simple_dispatch_model(self.model, device_map)
