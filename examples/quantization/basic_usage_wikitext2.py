@@ -141,6 +141,8 @@ def main():
         bits=4,  # quantize model to 4-bit
         group_size=128,  # it is recommended to set the value to 128
         desc_act=False,  # desc_act and group size only works on triton
+        nf4=True,
+        pack=False
     )
 
     # load un-quantized model, the model will always be force loaded into cpu
@@ -151,13 +153,13 @@ def main():
     model.quantize(traindataset, use_triton=False)
 
     # save quantized model
-    model.save_quantized(quantized_model_dir)
-
-    # save quantized model using safetensors
-    model.save_quantized(quantized_model_dir, use_safetensors=True)
-
-    # load quantized model, currently only support cpu or single gpu
-    model = AutoGPTQForCausalLM.from_quantized(quantized_model_dir, device="cuda:0", use_triton=False)
+    # model.save_quantized(quantized_model_dir)
+    #
+    # # save quantized model using safetensors
+    # model.save_quantized(quantized_model_dir, use_safetensors=True)
+    #
+    # # load quantized model, currently only support cpu or single gpu
+    # model = AutoGPTQForCausalLM.from_quantized(quantized_model_dir, device="cuda:0", use_triton=False)
 
     opt_eval(model.model, testenc, "cuda:0")
 
