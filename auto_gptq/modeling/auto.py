@@ -9,6 +9,7 @@ from .codegen import CodeGenGPTQForCausalLM
 from .cohere import CohereGPTQForCausalLM
 from .decilm import DeciLMGPTQForCausalLM
 from .gemma import GemmaGPTQForCausalLM
+from .gemma2 import Gemma2GPTQForCausalLM
 from .gpt2 import GPT2GPTQForCausalLM
 from .gpt_bigcode import GPTBigCodeGPTQForCausalLM
 from .gpt_neox import GPTNeoXGPTQForCausalLM
@@ -29,6 +30,7 @@ from .stablelmepoch import StableLMEpochGPTQForCausalLM
 from .starcoder2 import Starcoder2GPTQForCausalLM
 from .xverse import XverseGPTQForCausalLM
 from .yi import YiGPTQForCausalLM
+from .minicpm3 import MiniCPM3GPTQForCausalLM
 
 
 GPTQ_CAUSAL_LM_MODEL_MAP = {
@@ -49,6 +51,7 @@ GPTQ_CAUSAL_LM_MODEL_MAP = {
     "internlm": InternLMGPTQForCausalLM,
     "qwen": QwenGPTQForCausalLM,
     "mistral": MistralGPTQForCausalLM,
+    "minicpm3":MiniCPM3GPTQForCausalLM,
     "Yi": YiGPTQForCausalLM,
     "xverse": XverseGPTQForCausalLM,
     "deci": DeciLMGPTQForCausalLM,
@@ -58,6 +61,7 @@ GPTQ_CAUSAL_LM_MODEL_MAP = {
     "qwen2": Qwen2GPTQForCausalLM,
     "longllama": LongLlamaGPTQForCausalLM,
     "gemma": GemmaGPTQForCausalLM,
+    "gemma2": Gemma2GPTQForCausalLM,
     "phi": PhiGPTQForCausalLM,
     "mpt": MPTGPTQForCausalLM,
 }

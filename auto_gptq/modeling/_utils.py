@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import transformers
+import threadpoolctl as tctl
 from tqdm import tqdm
 from transformers import AutoConfig
 from transformers.utils.hub import cached_file
@@ -297,25 +298,29 @@ def pack_model(
     )
     qlayers = find_layers(model, [QuantLinear])
 
-    pbar = tqdm(qlayers.keys(), leave=True)
-    for name in pbar:
-        pbar.set_description(f"Packing {name}...", refresh=True)
+    # TODO remove once pack() thread regression is fixed
+    # Limit pack() thread usage to avoid slow-down: applies limit to all supported libs
+    with tctl.threadpool_limits(limits=1):
+        pbar = tqdm(qlayers.keys(), leave=True)
+        for name in pbar:
+            pbar.set_description(f"Packing {name}...", refresh=True)
 
-        quantizers[name], scale, zero, g_idx = quantizers[name]
-        # so far can only pack layer on CPU
-        layer_device = qlayers[name].device
-        qlayers[name].to(CPU)
-        layers[name], scale, zero, g_idx = (
-            layers[name].to(CPU),
-            scale.to(CPU),
-            zero.to(CPU),
-            g_idx.to(CPU),
-        )
-        if QuantLinear.QUANT_TYPE == "marlin":
-            qlayers[name].pack(layers[name], scale)
-        else:
-            qlayers[name].pack(layers[name], scale, zero, g_idx)
-        qlayers[name].to(layer_device)
+            quantizers[name], scale, zero, g_idx = quantizers[name]
+            # so far can only pack layer on CPU
+            layer_device = qlayers[name].device
+            qlayers[name].to(CPU)
+            layers[name], scale, zero, g_idx = (
+                layers[name].to(CPU),
+                scale.to(CPU),
+                zero.to(CPU),
+                g_idx.to(CPU),
+            )
+            if QuantLinear.QUANT_TYPE == "marlin":
+                qlayers[name].pack(layers[name], scale)
+            else:
+                qlayers[name].pack(layers[name], scale, zero, g_idx)
+            qlayers[name].to(layer_device)
+
     logger.info("Model packed.")
 
     if use_triton and warmup_triton:
@@ -480,11 +485,14 @@ def autogptq_post_init(model, use_act_order: bool, max_input_length: Optional[in
     model_uses_exllamav2 = False
 
     for _, submodule in model.named_modules():
-        if hasattr(submodule, "QUANT_TYPE") and submodule.QUANT_TYPE == "exllamav2":
-            model_uses_exllamav2 = True
-            device = submodule.qweight.device
-            scratch_fixed = submodule.scratch_space_fixed()
-            fixed_bytes[device] = max(scratch_fixed, fixed_bytes.get(device, 0))
+        if hasattr(submodule, "QUANT_TYPE"):
+            if submodule.QUANT_TYPE == "exllamav2":
+                model_uses_exllamav2 = True
+                device = submodule.qweight.device
+                scratch_fixed = submodule.scratch_space_fixed()
+                fixed_bytes[device] = max(scratch_fixed, fixed_bytes.get(device, 0))
+            elif submodule.QUANT_TYPE == "hpu":
+                submodule.post_init()
 
     if model_uses_exllamav2:
         from ..nn_modules.qlinear.qlinear_exllamav2 import ExLlamaV2DeviceTensors
@@ -510,7 +518,7 @@ def make_sure_no_tensor_in_meta_device(
 ):
     QuantLinear = dynamically_import_QuantLinear(use_triton, desc_act, group_size, bits=bits, disable_exllama=disable_exllama, disable_exllamav2=disable_exllamav2, use_marlin=use_marlin, use_tritonv2=use_tritonv2)
     for n, m in model.named_modules():
-        if isinstance(m, QuantLinear) and m.bias.device == torch.device("meta"):
+        if isinstance(m, QuantLinear) and m.bias is not None and m.bias.device == torch.device("meta"):
             m.register_buffer("bias", torch.zeros((m.outfeatures), dtype=torch.float16, device="cpu"))
 
 
