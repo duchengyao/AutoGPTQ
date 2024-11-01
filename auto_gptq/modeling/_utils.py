@@ -148,6 +148,83 @@ def make_quant(
             recurse_setattr(module, name, new_layer.to(ori_layer_device))
 
 
+def pack_model(
+    model,
+    quantizers,
+    bits,
+    group_size,
+    use_triton=False,
+    use_cuda_fp16=True,
+    desc_act=False,
+    warmup_triton: bool = False,
+    force_layer_back_to_cpu: bool = False,
+    use_marlin: bool = False,
+    use_nf4:bool=False,
+    use_tritonv2: bool = False,
+):
+    QuantLinear = dynamically_import_QuantLinear(
+        use_triton=use_triton,
+        desc_act=desc_act,
+        group_size=group_size,
+        bits=bits,
+        disable_exllama=False,
+        disable_exllamav2=True,
+        use_marlin=use_marlin,
+        use_tritonv2=use_tritonv2,
+    )
+
+    if force_layer_back_to_cpu:
+        model.to(CPU)
+
+    logger.info("Packing model...")
+    layers = find_layers(model)
+    layers = {n: layers[n] for n in quantizers}
+    make_quant(
+        model,
+        quantizers,
+        bits,
+        group_size,
+        use_triton=use_triton,
+        use_cuda_fp16=use_cuda_fp16,
+        desc_act=desc_act,
+        disable_exllama=False,
+        disable_exllamav2=True,
+        use_marlin=use_marlin,
+    )
+    qlayers = find_layers(model, [QuantLinear])
+
+    # TODO remove once pack() thread regression is fixed
+    # Limit pack() thread usage to avoid slow-down: applies limit to all supported libs
+    with tctl.threadpool_limits(limits=1):
+        pbar = tqdm(qlayers.keys(), leave=True)
+        for name in pbar:
+            pbar.set_description(f"Packing {name}...", refresh=True)
+
+            quantizers[name], scale, zero, g_idx = quantizers[name]
+            # so far can only pack layer on CPU
+            layer_device = qlayers[name].device
+            qlayers[name].to(CPU)
+            layers[name], scale, zero, g_idx = (
+                layers[name].to(CPU),
+                scale.to(CPU),
+                zero.to(CPU),
+                g_idx.to(CPU),
+            )
+            if QuantLinear.QUANT_TYPE == "marlin":
+                qlayers[name].pack(layers[name], scale)
+            else:
+                qlayers[name].pack(layers[name], scale, zero, g_idx,nf4=use_nf4)
+            qlayers[name].to(layer_device)
+
+    logger.info("Model packed.")
+
+    if use_triton and warmup_triton:
+        logger.warning(
+            "using autotune_warmup will move model to GPU, make sure you have enough VRAM to load the whole model."
+        )
+        QuantLinear.warmup(model.to(CUDA_0), seqlen=model.seqlen)
+
+
 def preprocess_checkpoint_qigen(
     module,
     names,
@@ -252,82 +329,6 @@ def preprocess_checkpoint_qigen(
             checkpoint,
             name + "." + name1 if name != "" else name1,
         )
-
-
-def pack_model(
-    model,
-    quantizers,
-    bits,
-    group_size,
-    use_triton=False,
-    use_cuda_fp16=True,
-    desc_act=False,
-    warmup_triton: bool = False,
-    force_layer_back_to_cpu: bool = False,
-    use_marlin: bool = False,
-    use_tritonv2: bool = False,
-):
-    QuantLinear = dynamically_import_QuantLinear(
-        use_triton=use_triton,
-        desc_act=desc_act,
-        group_size=group_size,
-        bits=bits,
-        disable_exllama=False,
-        disable_exllamav2=True,
-        use_marlin=use_marlin,
-        use_tritonv2=use_tritonv2,
-    )
-
-    if force_layer_back_to_cpu:
-        model.to(CPU)
-
-    logger.info("Packing model...")
-    layers = find_layers(model)
-    layers = {n: layers[n] for n in quantizers}
-    make_quant(
-        model,
-        quantizers,
-        bits,
-        group_size,
-        use_triton=use_triton,
-        use_cuda_fp16=use_cuda_fp16,
-        desc_act=desc_act,
-        disable_exllama=False,
-        disable_exllamav2=True,
-        use_marlin=use_marlin,
-    )
-    qlayers = find_layers(model, [QuantLinear])
-
-    # TODO remove once pack() thread regression is fixed
-    # Limit pack() thread usage to avoid slow-down: applies limit to all supported libs
-    with tctl.threadpool_limits(limits=1):
-        pbar = tqdm(qlayers.keys(), leave=True)
-        for name in pbar:
-            pbar.set_description(f"Packing {name}...", refresh=True)
-
-            quantizers[name], scale, zero, g_idx = quantizers[name]
-            # so far can only pack layer on CPU
-            layer_device = qlayers[name].device
-            qlayers[name].to(CPU)
-            layers[name], scale, zero, g_idx = (
-                layers[name].to(CPU),
-                scale.to(CPU),
-                zero.to(CPU),
-                g_idx.to(CPU),
-            )
-            if QuantLinear.QUANT_TYPE == "marlin":
-                qlayers[name].pack(layers[name], scale)
-            else:
-                qlayers[name].pack(layers[name], scale, zero, g_idx)
-            qlayers[name].to(layer_device)
-
-    logger.info("Model packed.")
-
-    if use_triton and warmup_triton:
-        logger.warning(
-            "using autotune_warmup will move model to GPU, make sure you have enough VRAM to load the whole model."
-        )
-        QuantLinear.warmup(model.to(CUDA_0), seqlen=model.seqlen)
 
 
 def check_and_get_model_type(model_dir, trust_remote_code=False):

@@ -387,6 +387,7 @@ class BaseGPTQForCausalLM(nn.Module, PushToHubMixin):
                 warmup_triton=autotune_warmup_after_quantized,
                 force_layer_back_to_cpu=force_layer_back_to_cpu,
                 use_marlin=self.quantize_config.checkpoint_format == CHECKPOINT_FORMAT.MARLIN,
+                use_nf4=self.quantize_config.nf4,
             )
         if device_map:
             self.model = remove_hook_from_module(self.model, recurse=True)

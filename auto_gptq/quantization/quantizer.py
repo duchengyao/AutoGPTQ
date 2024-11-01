@@ -25,19 +25,49 @@ nf4_map = [
     1.0,
 ]
 
+nf4_tensor={}
+def get_nf4_tensor(x):
+    keys=nf4_tensor.keys()
+    if x.device not in keys:
+        nf4_tensor[x.device]=torch.tensor(nf4_map, device=x.device, dtype=torch.float32)
+    return nf4_tensor[x.device]
+
 
 def quantize_nf4(x, scale, zero, maxq):
-    dev = x.device
-    xx = ((x / scale) + zero) / 8 - 1
-    nf4_tensor = torch.tensor(nf4_map, device=dev, dtype=torch.float32)
+    DEBUG = False
+
+    if DEBUG:
+        if maxq != 15:
+            print("[Warning]!!!!![quantize_nf4] maxq!=15,", maxq)
+
+        if x.dim() != 2:
+            print("[Warning]!!!!![quantize_nf4] x.dim()!=2,", x.dim)
+
+        if x.shape[-1] != 1:
+            print("[Warning]!!!!![quantize_nf4] x.shape[-1]!=1,", x.shape)
+
+    nf4_tensor = get_nf4_tensor(x)
     expanded_nf4_tensor = nf4_tensor.unsqueeze(1)
-    q = nf4_tensor[torch.abs(expanded_nf4_tensor - xx.squeeze(1).unsqueeze(0)).argmin(dim=0)].unsqueeze(1)
-    qq = scale * ((q + 1) * 8 - zero)
-    return qq
+
+    # 量化
+    norm_0to16 = ((x / scale) + zero)
+    norm_n1to1 = norm_0to16 / 8 - 1
+    q = nf4_tensor[torch.abs(expanded_nf4_tensor - norm_n1to1.squeeze(1).unsqueeze(0)).argmin(dim=0)].unsqueeze(
+        1)
+    # 反量化
+    dq = scale * ((q + 1) * 8 - zero)
+
+    if DEBUG:
+        diff = dq - quantize(x, scale, zero, maxq)
+        if any(max(abs(diff * scale)) > 0.3):
+            print("[Warning]!!!!max(diff):", max(diff))
+
+    return dq
 
 
 def quantize(x, scale, zero, maxq):
     if maxq < 0:
+        print("=====Warning: maxq is negative=====")
         return (x > scale / 2).float() * scale + (x < zero / 2).float() * zero
     q = torch.clamp(torch.round(x / scale) + zero, 0, maxq)
     return scale * (q - zero)
@@ -62,7 +92,7 @@ class Quantizer(nn.Module):
         nf4=False,
         trits=False,
     ):
-        self.maxq = torch.tensor(2**bits - 1)
+        self.maxq = torch.tensor(2 ** bits - 1)
         self.perchannel = perchannel
         self.sym = sym
         self.mse = mse
@@ -171,3 +201,15 @@ class Quantizer(nn.Module):
 
 
 __all__ = ["Quantizer"]
+
+"""
+unit test
+"""
+if __name__ == '__main__':
+    x = torch.tensor([[0], [7.8796e-2]])
+    scale = torch.tensor([[1], [0.0438]])
+    zero = torch.tensor([[0], [8]])
+    maxq = torch.tensor(15)
+
+    print(quantize(x, scale, zero, maxq))
+    print(quantize_nf4(x, scale, zero, maxq))

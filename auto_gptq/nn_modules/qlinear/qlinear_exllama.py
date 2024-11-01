@@ -66,7 +66,7 @@ class QuantLinear(nn.Module):
         self.bits = bits
         self.group_size = group_size if group_size != -1 else infeatures
         self.trainable = trainable
-        self.maxq = 2**self.bits - 1
+        self.maxq = 2 ** self.bits - 1
 
         assert infeatures % 32 == 0
         assert infeatures % self.group_size == 0
@@ -118,7 +118,7 @@ class QuantLinear(nn.Module):
             self.qweight.device.index,
         )
 
-    def pack(self, linear, scales, zeros, g_idx=None):
+    def pack(self, linear, scales, zeros, g_idx=None, nf4=False):
         W = linear.weight.data.clone()
         if isinstance(linear, nn.Conv2d):
             W = W.flatten(1)
@@ -136,11 +136,56 @@ class QuantLinear(nn.Module):
 
         intweight = []
         for idx in range(self.infeatures):
-            intweight.append(
-                torch.round((W[:, idx] + scale_zeros[self.g_idx[idx]]) / self.scales[self.g_idx[idx]]).to(torch.int)[
-                    :, None
+            x = W[:, idx]
+            s_zero = scale_zeros[self.g_idx[idx]]
+            s = self.scales[self.g_idx[idx]]
+
+            if not nf4:
+                q = torch.round((x + s_zero) / s).to(torch.int)[:, None]
+            else:
+                nf4_map = [
+                    -1.0,
+                    -0.6961928009986877,
+                    -0.5250730514526367,
+                    -0.39491748809814453,
+                    -0.28444138169288635,
+                    -0.18477343022823334,
+                    -0.09105003625154495,
+                    0.0,
+                    0.07958029955625534,
+                    0.16093020141124725,
+                    0.24611230194568634,
+                    0.33791524171829224,
+                    0.44070982933044434,
+                    0.5626170039176941,
+                    0.7229568362236023,
+                    1.0,
                 ]
-            )
+                nf4_tensor = {}
+
+                def get_nf4_tensor(x):
+                    keys = nf4_tensor.keys()
+                    if x.device not in keys:
+                        nf4_tensor[x.device] = torch.tensor(nf4_map, device=x.device, dtype=torch.float32)
+                    return nf4_tensor[x.device]
+
+                nf4_tensor = get_nf4_tensor(x)
+                expanded_nf4_tensor = nf4_tensor.unsqueeze(1)
+                norm_0to16 = (x + s_zero) / s
+                norm_n1to1 = norm_0to16 / 8 - 1
+                q = torch.abs(expanded_nf4_tensor - norm_n1to1.unsqueeze(0)).argmin(dim=0)
+                q = q.to(torch.int)[:, None]
+
+                DEBUG = False
+                if DEBUG:
+                    if q.max() > 15 or q.min() < 0:
+                        print("[WARNING]!!!!!!PACKING q.max() > 15 or q.min() < 0:", q.max(), q.min())
+                    qq = torch.round((x + s_zero) / s).to(torch.int)[:, None]
+                    diff = max(abs(q - qq))
+                    if diff > 2:
+                        print("[WARNING]!!!!!!PACKING diff>2:", diff)
+
+            intweight.append(q)
         intweight = torch.cat(intweight, dim=1)
         intweight = intweight.t().contiguous()
         intweight = intweight.numpy().astype(np.uint32)
