@@ -3,6 +3,7 @@
 
 #include "qdq_util.cuh"
 #include "../../config.h"
+#include <iostream>
 
 #if QMODE_4BIT == 1
 
@@ -89,6 +90,8 @@ __forceinline__ __device__ void dequant_4bit_8_prep_zero
     half2(&y1y16)[2]
 )
 {
+
+//    std::cout<<zero<<std::endl;
     half_uint16 z1(0xe400 | zero); // half(-1024.0f - zero);
     half z16 = __hsub(__int2half_rn(-64), __int2half_rn(zero));
 

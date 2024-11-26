@@ -13,7 +13,7 @@ import numpy as np
 import torch.nn as nn
 
 pretrained_model_dir = "facebook/opt-125m"
-quantized_model_dir = "gptq_int4_safetensors"
+quantized_model_dir = "examples/quantization/gptq_int4_nosafetensors"
 
 
 # os.makedirs(quantized_model_dir, exist_ok=True)
@@ -68,6 +68,7 @@ def get_module_by_name_prefix(model, module_name: str):
 
 def main():
     tokenizer = AutoTokenizer.from_pretrained(pretrained_model_dir, use_fast=True)
+
     examples = [
         tokenizer(
             "auto-gptq is an easy-to-use model quantization library with user-friendly apis, based on GPTQ algorithm."
@@ -83,41 +84,30 @@ def main():
         nf4=False,
         pack=True
     )
-
-    """现在的问题是PACK不了！"""
-
-    # # load un-quantized model, by default, the model will always be loaded into CPU memory
+    #
     model = AutoGPTQForCausalLM.from_pretrained(pretrained_model_dir, quantize_config)
-    # # #
-    # # ppl = Perplexity(
-    # #     model,
-    # #     tokenizer
-    # # )
     # #
-    # # ppl.calculate_perplexity()
-    # #
-    # #
-    # # quantize model, the examples should be list of dict whose keys can only be "input_ids" and "attention_mask"
     model.quantize(traindataset)
-    # #
-    # #
-    # # ppl = Perplexity(
-    # #     model,
-    # #     tokenizer
-    # # )
-    # # ppl.calculate_perplexity()
-    #
-    model.save_quantized(quantized_model_dir)
-    #
-    # # # load quantized model to the first GPU
-    model1 = AutoGPTQForCausalLM.from_quantized(quantized_model_dir, device="cuda:0")
-    #
-    #
-    ppl = Perplexity(
-        model1,
-        tokenizer
-    )
-    ppl.calculate_perplexity()
+    
+    model.save_quantized(quantized_model_dir,use_safetensors=False)
+    # model = AutoGPTQForCausalLM.from_quantized(quantized_model_dir, device="cuda:0")
+
+    # print(tokenizer.decode(model.generate(**tokenizer("auto_gptq is", return_tensors="pt").to(model.device))[0]))
+
+    # token = tokenizer("auto_gptq is", return_tensors="pt").to(model.device)
+    # out = model.generate(**token)
+    # print(tokenizer.decode(out[0]))
+
+
+    # or you can also use pipeline
+    # pipeline = TextGenerationPipeline(model=model, tokenizer=tokenizer)
+    # print(pipeline("auto-gptq is")[0]["generated_text"])
+
+    # ppl = Perplexity(
+    #     model,
+    #     tokenizer
+    # )
+    # ppl.calculate_perplexity()
 
 
 if __name__ == "__main__":

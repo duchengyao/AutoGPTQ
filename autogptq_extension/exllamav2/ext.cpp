@@ -5,6 +5,7 @@
 #include <cuda_fp16.h>
 #include <cstdint>
 #include <cstdio>
+#include <iostream>
 
 #include "config.h"
 
@@ -102,6 +103,7 @@ void gemm_half_q_half
 {
     QMatrix* qm = reinterpret_cast<QMatrix*> (b);
 
+    std::cout<<"xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"<<std::endl;
     TORCH_CHECK_DTYPE(a, kHalf);
     TORCH_CHECK_DTYPE(c, kHalf);
     TORCH_CHECK_SHAPES(a, 0, c, 0, 1);
@@ -132,3 +134,12 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
     m.def("make_q_matrix", &make_q_matrix, "make_q_matrix");
     m.def("gemm_half_q_half", &gemm_half_q_half, "gemm_half_q_half");
 }
+
+int main(){
+    // none_tensor = torch.empty((1, 1), device="meta")
+    float data[] = { 1, 2, 3,
+                     4, 5, 7 };
+    torch::Tensor f = torch::from_blob(data, {2, 3});
+    // ext_make_q_matrix
+}
+

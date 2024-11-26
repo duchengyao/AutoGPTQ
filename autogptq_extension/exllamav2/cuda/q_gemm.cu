@@ -34,6 +34,8 @@ void gemm_half_q_half_cuda_part
 {
     if (!b->is_gptq)
     {
+
+        printf("is_gptq=========================================");
         dim3 blockDim, gridDim;
         blockDim.x = BLOCK_KN_SIZE;
         blockDim.y = 1;
@@ -68,6 +70,8 @@ void gemm_half_q_half_cuda_part
     }
     else
     {
+        printf("NOT_gptq=========================================");
+
         dim3 blockDim, gridDim;
         blockDim.x = BLOCK_KN_SIZE;
         blockDim.y = 1;
@@ -117,7 +121,7 @@ void gemm_half_q_half_cuda
 {
     if (size_m > MAX_Q_GEMM_ROWS && !force_cuda)
     {
-        //printf("cublas\n");
+//         printf("cublas\n");
 
         // Reconstruct FP16 matrix, then cuBLAS
 
@@ -158,7 +162,7 @@ void gemm_half_q_half_cuda
     }
     else
     {
-        //printf("cuda\n");
+//         printf("cuda\n");
 
         // Quantized matmul
 

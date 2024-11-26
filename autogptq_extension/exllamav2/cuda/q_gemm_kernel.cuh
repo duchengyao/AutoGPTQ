@@ -85,6 +85,7 @@ typedef void (*fp_gemm_half_q_half_kernel)
 );
 
 template <bool first_block, int m_count>
+// TODO(duchengyao): kernel
 __global__ void gemm_half_q_half_kernel
 (
     const half*      __restrict__ a,

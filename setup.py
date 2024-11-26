@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 from setuptools import find_packages, setup
-
+from setuptools.command.build_ext import build_ext as _build_ext
 
 os.environ["CC"] = "g++"
 os.environ["CXX"] = "g++"
@@ -41,6 +41,7 @@ BUILD_CUDA_EXT = int(os.environ.get('BUILD_CUDA_EXT', '1')) == 1
 DISABLE_QIGEN = int(os.environ.get('DISABLE_QIGEN', '1')) == 1
 COMPILE_MARLIN = int(os.environ.get('COMPILE_MARLIN', '1')) == 1
 UNSUPPORTED_COMPUTE_CAPABILITIES = ['3.5', '3.7', '5.0', '5.2', '5.3']
+EXTRA_COMPILE_ARGS = {'cxx': ['-g'],  'nvcc': ['-g','-G']}
 
 def detect_local_sm_architectures():
     """
@@ -170,14 +171,16 @@ if BUILD_CUDA_EXT:
             [
                 "autogptq_extension/cuda_64/autogptq_cuda_64.cpp",
                 "autogptq_extension/cuda_64/autogptq_cuda_kernel_64.cu"
-            ]
+            ],
+            extra_compile_args=EXTRA_COMPILE_ARGS,
         ),
         cpp_extension.CUDAExtension(
             "autogptq_cuda_256",
             [
                 "autogptq_extension/cuda_256/autogptq_cuda_256.cpp",
                 "autogptq_extension/cuda_256/autogptq_cuda_kernel_256.cu"
-            ]
+            ],
+            extra_compile_args=EXTRA_COMPILE_ARGS,
         )
     ]
 
@@ -189,7 +192,7 @@ if BUILD_CUDA_EXT:
                     [
                         'autogptq_extension/qigen/backend.cpp'
                     ],
-                    extra_compile_args = ["-O3", "-mavx", "-mavx2", "-mfma", "-march=native", "-ffast-math", "-ftree-vectorize", "-faligned-new", "-std=c++17", "-fopenmp", "-fno-signaling-nans", "-fno-trapping-math"]
+                    extra_compile_args = ["-g", "-O0", "-mavx", "-mavx2", "-mfma", "-march=native", "-ffast-math", "-ftree-vectorize", "-faligned-new", "-std=c++17", "-fopenmp", "-fno-signaling-nans", "-fno-trapping-math"]
                 )
             )
 
@@ -202,7 +205,8 @@ if BUILD_CUDA_EXT:
                         'autogptq_extension/marlin/marlin_cuda.cpp',
                         'autogptq_extension/marlin/marlin_cuda_kernel.cu',
                         'autogptq_extension/marlin/marlin_repack.cu'
-                    ]
+                    ],
+                    extra_compile_args=EXTRA_COMPILE_ARGS,
                 )
             )
 
@@ -225,7 +229,8 @@ if BUILD_CUDA_EXT:
                 "autogptq_extension/exllama/cuda_func/q4_matmul.cu",
                 "autogptq_extension/exllama/cuda_func/q4_matrix.cu"
             ],
-            extra_link_args=extra_link_args
+            extra_link_args=extra_link_args,
+            extra_compile_args=EXTRA_COMPILE_ARGS,
         )
     )
     extensions.append(
@@ -236,7 +241,8 @@ if BUILD_CUDA_EXT:
                 "autogptq_extension/exllamav2/cuda/q_matrix.cu",
                 "autogptq_extension/exllamav2/cuda/q_gemm.cu",
             ],
-            extra_link_args=extra_link_args
+            extra_link_args=extra_link_args,
+            extra_compile_args=EXTRA_COMPILE_ARGS,
         )
     )
 

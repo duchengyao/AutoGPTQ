@@ -481,6 +481,8 @@ void QMatrix::reconstruct(half* out)
     }
     else
     {
+//        printf("QMatrix:reconstruct_gptq_kernel");
+
         gridDim.x = DIVIDE(width, BLOCK_KN_SIZE * 4);
         reconstruct_gptq_kernel<<<gridDim, blockDim>>>
         (
